@@ -9,6 +9,7 @@ services:
     environment:
       - NODE_ENV=development
       - NEXT_TELEMETRY_DISABLED=1
+      - NEXT_PUBLIC_API_URL=http://localhost:4000
     volumes:
       - ./wesupply:/app
       - /app/node_modules
@@ -26,6 +27,25 @@ services:
     environment:
       - NODE_ENV=development
       - PORT=4000
+      - DATABASE_URL=postgresql://wesupply:wesupply@db:5432/wesupply
+      - JWT_SECRET=wesupply-dev-secret
+      - FRONTEND_ORIGIN=http://localhost:3000
     volumes:
       - ./backend:/app
-      - /app/node_modules
+    depends_on:
+      - db
+
+  db:
+    image: postgres:16
+    container_name: wesupply-db
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_USER=wesupply
+      - POSTGRES_PASSWORD=wesupply
+      - POSTGRES_DB=wesupply
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+volumes:
+  postgres_data:

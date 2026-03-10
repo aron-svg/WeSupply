@@ -1,8 +1,50 @@
+"use client";
+
+import { FormEvent, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
+import { useRouter } from "next/navigation";
 import grape from "@/public/grape.png";
 
+const apiBaseUrl = "/api";
+
 export default function Login() {
+  const router = useRouter();
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setError("");
+    setIsLoading(true);
+
+    try {
+      const response = await fetch(`${apiBaseUrl}/auth/login`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        credentials: "include",
+        body: JSON.stringify({ email, password }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        setError(data.error || "Login failed");
+        return;
+      }
+
+      router.push("/preferences");
+    } catch (_error) {
+      setError("Unable to reach server. Try again.");
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
   return (
     <div className="relative flex min-h-screen items-center justify-center bg-white overflow-hidden">
       {/* Grape image from the left */}
@@ -20,7 +62,7 @@ export default function Login() {
           <p className="text-gray-600 text-sm">Login to your account</p>
         </div>
 
-        <form className="space-y-4">
+        <form className="space-y-4" onSubmit={handleSubmit}>
           {/* Email Input */}
           <div>
             <label htmlFor="email" className="block text-sm text-gray-400 mb-2">
@@ -29,8 +71,11 @@ export default function Login() {
             <input
               type="email"
               id="email"
+              value={email}
+              onChange={(event) => setEmail(event.target.value)}
               placeholder="enbisohwodegratefulruki@gmail.com"
               className="w-full px-4 py-3 rounded-lg bg-gray-800/50 border border-gray-700 text-white placeholder-gray-500 focus:outline-none focus:border-emerald-500 transition"
+              required
             />
           </div>
 
@@ -43,8 +88,11 @@ export default function Login() {
               <input
                 type="password"
                 id="password"
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
                 placeholder="••••••••••"
                 className="w-full px-4 py-3 rounded-lg bg-gray-800/50 border border-gray-700 text-white placeholder-gray-500 focus:outline-none focus:border-emerald-500 transition"
+                required
               />
               <button
                 type="button"
@@ -58,10 +106,13 @@ export default function Login() {
           {/* Login Button */}
           <button
             type="submit"
+            disabled={isLoading}
             className="w-full py-3 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-semibold transition"
           >
-            Login
+            {isLoading ? "Logging in..." : "Login"}
           </button>
+
+          {error ? <p className="text-sm text-red-500">{error}</p> : null}
 
           {/* Divider */}
           <div className="relative my-6">

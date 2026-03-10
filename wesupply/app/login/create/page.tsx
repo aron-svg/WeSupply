@@ -1,8 +1,58 @@
+"use client";
+
+import { FormEvent, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
+import { useRouter } from "next/navigation";
 import grape from "@/public/grape.png";
 
+const apiBaseUrl = "/api";
+
 export default function CreateAccount() {
+  const router = useRouter();
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [error, setError] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setError("");
+
+    if (password !== confirmPassword) {
+      setError("Passwords do not match");
+      return;
+    }
+
+    setIsLoading(true);
+
+    try {
+      const response = await fetch(`${apiBaseUrl}/auth/register`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        credentials: "include",
+        body: JSON.stringify({ name, email, password }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        setError(data.error || "Account creation failed");
+        return;
+      }
+
+      router.push("/preferences");
+    } catch (_error) {
+      setError("Unable to reach server. Try again.");
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
   return (
     <div className="relative flex min-h-screen items-center justify-center bg-white overflow-hidden">
       {/* Grape image from the left */}
@@ -20,7 +70,7 @@ export default function CreateAccount() {
           <p className="text-gray-600 text-sm">Join WeSupply today</p>
         </div>
 
-        <form className="space-y-4">
+        <form className="space-y-4" onSubmit={handleSubmit}>
           {/* Full Name Input */}
           <div>
             <label htmlFor="name" className="block text-sm text-gray-700 mb-2">
@@ -29,8 +79,11 @@ export default function CreateAccount() {
             <input
               type="text"
               id="name"
+              value={name}
+              onChange={(event) => setName(event.target.value)}
               placeholder="John Doe"
               className="w-full px-4 py-3 rounded-lg bg-gray-50 border border-gray-300 text-gray-900 placeholder-gray-400 focus:outline-none focus:border-emerald-500 transition"
+              required
             />
           </div>
 
@@ -42,8 +95,11 @@ export default function CreateAccount() {
             <input
               type="email"
               id="email"
+              value={email}
+              onChange={(event) => setEmail(event.target.value)}
               placeholder="your.email@gmail.com"
               className="w-full px-4 py-3 rounded-lg bg-gray-50 border border-gray-300 text-gray-900 placeholder-gray-400 focus:outline-none focus:border-emerald-500 transition"
+              required
             />
           </div>
 
@@ -56,8 +112,12 @@ export default function CreateAccount() {
               <input
                 type="password"
                 id="password"
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
                 placeholder="••••••••••"
                 className="w-full px-4 py-3 rounded-lg bg-gray-50 border border-gray-300 text-gray-900 placeholder-gray-400 focus:outline-none focus:border-emerald-500 transition"
+                required
+                minLength={6}
               />
               <button
                 type="button"
@@ -77,8 +137,12 @@ export default function CreateAccount() {
               <input
                 type="password"
                 id="confirmPassword"
+                value={confirmPassword}
+                onChange={(event) => setConfirmPassword(event.target.value)}
                 placeholder="••••••••••"
                 className="w-full px-4 py-3 rounded-lg bg-gray-50 border border-gray-300 text-gray-900 placeholder-gray-400 focus:outline-none focus:border-emerald-500 transition"
+                required
+                minLength={6}
               />
               <button
                 type="button"
@@ -92,10 +156,13 @@ export default function CreateAccount() {
           {/* Sign Up Button */}
           <button
             type="submit"
+            disabled={isLoading}
             className="w-full py-3 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-semibold transition"
           >
-            Create Account
+            {isLoading ? "Creating account..." : "Create Account"}
           </button>
+
+          {error ? <p className="text-sm text-red-600">{error}</p> : null}
 
           {/* Divider */}
           <div className="relative my-6">
