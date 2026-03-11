@@ -170,9 +170,89 @@ app.post("/auth/logout", (_req, res) => {
   return res.json({ message: "Logged out" });
 });
 
+function toSafeNumber(value, fallback) {
+  const parsed = Number.parseFloat(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function toMealCount(value) {
+  const parsed = Number.parseInt(String(value), 10);
+  if (parsed === 3 || parsed === 4 || parsed === 5) {
+    return parsed;
+  }
+  return 3;
+}
+
+function buildMealPlanPrompt(profile) {
+  const userName = profile.fullName || profile.user || "Aron";
+  const mainGoal = profile.mainGoal || "Lose Weight";
+  const age = toSafeNumber(profile.age, 25);
+  const heightValue = toSafeNumber(profile.heightValue, 180);
+  const weightValue = toSafeNumber(profile.weightValue, 70);
+  const activityLevel = profile.activityLevel || "little to no exercise";
+  const budgetAmount = toSafeNumber(profile.budgetAmount, 75);
+  const budgetCadence = profile.budgetCadence || "weekly";
+  const weeklyBudget = budgetCadence === "monthly" ? budgetAmount / 4 : budgetAmount;
+  const dailyBudget = weeklyBudget / 7;
+  const dietaryRestrictions = profile.dietaryRestrictions || "none";
+  const expectedCalories = Math.round(
+    toSafeNumber(profile.expectedCalorieIntake, toSafeNumber(profile.calculatedIntake, 1875))
+  );
+  const mealCount = toMealCount(profile.numberOfMeals);
+
+  return [
+    "Role: Expert nutritionist and private AI chef.",
+    "Goal: Generate a strict, balanced and personalized DAILY meal plan.",
+    "",
+    "User Data (Variables):",
+    `- User: ${userName}`,
+    `- Main Goal: ${mainGoal}`,
+    `- Profile: ${profile.gender || "male"}, ${age} years old, ${heightValue} ${profile.heightUnit || "cm"}, ${weightValue} ${profile.weightUnit || "kg"}, ${activityLevel}.`,
+    `- Weekly Budget: ${weeklyBudget.toFixed(2)}`,
+    `- Dietary Restrictions: ${dietaryRestrictions}`,
+    `- Daily Target Calories: ${expectedCalories} kcal/day`,
+    `- Number of meals requested: ${mealCount} meals/day`,
+    "",
+    "Production Rules:",
+    `1. Calorie split: divide ${expectedCalories} kcal intelligently across exactly ${mealCount} meals.`,
+    `2. Budget: every meal must stay economical to respect ${dailyBudget.toFixed(2)} per day.`,
+    "3. No pork: strictly avoid pork and pork-derived ingredients.",
+    "4. For each dish, include a youtube_search_link in this format:",
+    '   https://www.youtube.com/results?search_query=[Nom+de+la+recette+saine+facile]',
+    "",
+    "Output format requirements:",
+    "- Return STRICT JSON only.",
+    "- No markdown, no explanations, no code fences.",
+    "- Keep exact keys and structure below.",
+    "",
+    JSON.stringify(
+      {
+        user: userName,
+        daily_goal_kcal: expectedCalories,
+        number_of_meals: mealCount,
+        meals: [
+          {
+            meal_index: 1,
+            label: "Petit-dejeuner",
+            recipe_name: "Nom du plat",
+            calories: Math.round(expectedCalories / mealCount),
+            macros: { p: "25g", c: "40g", f: "15g" },
+            ingredients: ["ingredient 1", "ingredient 2"],
+            cooking_time: "10 min",
+            youtube_search_link:
+              "https://www.youtube.com/results?search_query=recette+healthy+nom+du+plat",
+          },
+        ],
+      },
+      null,
+      2
+    ),
+  ].join("\n");
+}
+
 app.post("/meal-plan/generate", authMiddleware, async (req, res) => {
   const apiKey = process.env.GEMINI_API_KEY;
-  const model = process.env.GEMINI_MODEL || "gemini-2.0-flash";
+  const model = process.env.GEMINI_MODEL || "gemini-2.5-flash";
   const { profile, prompt } = req.body;
 
   if (!profile || typeof profile !== "object") {
@@ -183,12 +263,7 @@ app.post("/meal-plan/generate", authMiddleware, async (req, res) => {
     return res.status(503).json({ error: "Gemini API key is not configured on the backend" });
   }
 
-  const defaultPrompt = [
-    "Create a practical personalized 7-day meal plan from this user profile.",
-    "Return concise day-by-day meals (breakfast, lunch, dinner, snack), short prep notes, and a simple grocery list.",
-    "Keep the format clear and readable.",
-    `Profile JSON: ${JSON.stringify(profile)}`,
-  ].join("\n");
+  const defaultPrompt = buildMealPlanPrompt(profile);
 
   const promptText = typeof prompt === "string" && prompt.trim().length > 0 ? prompt : defaultPrompt;
 
@@ -201,6 +276,9 @@ app.post("/meal-plan/generate", authMiddleware, async (req, res) => {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
+          generationConfig: {
+            responseMimeType: "application/json",
+          },
           contents: [
             {
               role: "user",
@@ -227,7 +305,14 @@ app.post("/meal-plan/generate", authMiddleware, async (req, res) => {
       return res.status(502).json({ error: "Gemini returned an empty meal plan" });
     }
 
-    return res.json({ mealPlan, model });
+    let parsedMealPlan = mealPlan;
+    try {
+      parsedMealPlan = JSON.parse(mealPlan);
+    } catch (_error) {
+      // Keep raw text if provider did not return valid JSON.
+    }
+
+    return res.json({ mealPlan: parsedMealPlan, model });
   } catch (error) {
     return res.status(500).json({ error: "Failed to generate meal plan", details: error.message });
   }

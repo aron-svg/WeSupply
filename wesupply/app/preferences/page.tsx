@@ -39,6 +39,7 @@ type FormData = {
   weightLossTargetUnit: "kg" | "lbs";
   weightLossDurationValue: string;
   weightLossDurationUnit: "weeks" | "months";
+  numberOfMeals: "3" | "4" | "5";
   dietaryRestrictions: string;
   additionalNote: string;
   fullName: string;
@@ -56,6 +57,7 @@ export default function PreferencesPage() {
   const [stepError, setStepError] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState("");
+  const [generatedMealPlan, setGeneratedMealPlan] = useState<unknown>(null);
   const [selectedEquation, setSelectedEquation] = useState<EquationKey>("mifflin");
   const [formData, setFormData] = useState<FormData>({
     mainGoal: "",
@@ -72,6 +74,7 @@ export default function PreferencesPage() {
     weightLossTargetUnit: "kg",
     weightLossDurationValue: "",
     weightLossDurationUnit: "weeks",
+    numberOfMeals: "3",
     dietaryRestrictions: "",
     additionalNote: "",
     fullName: "",
@@ -246,6 +249,18 @@ export default function PreferencesPage() {
     [calorieData, formData, selectedEquation, weightLossProjection]
   );
 
+  const formattedMealPlan = useMemo(() => {
+    if (!generatedMealPlan) {
+      return "";
+    }
+
+    if (typeof generatedMealPlan === "string") {
+      return generatedMealPlan;
+    }
+
+    return JSON.stringify(generatedMealPlan, null, 2);
+  }, [generatedMealPlan]);
+
   useEffect(() => {
     async function loadUser() {
       try {
@@ -287,15 +302,31 @@ export default function PreferencesPage() {
 
   async function handleSavePreferences() {
     setIsSaving(true);
+    setStepError("");
     setSaveMessage("");
+    setGeneratedMealPlan(null);
 
     try {
-      if (typeof window !== "undefined") {
-        sessionStorage.setItem("wesupply_profile_payload", JSON.stringify(profilePayload));
+      const response = await fetch(`${apiBaseUrl}/meal-plan/generate`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        credentials: "include",
+        body: JSON.stringify({ profile: profilePayload }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        setStepError(data.error || "Failed to generate meal plan.");
+        return;
       }
 
-      setSaveMessage("Profile ready. Redirecting...");
-      router.push("/preferences/render-plan");
+      setGeneratedMealPlan(data.mealPlan || null);
+      setSaveMessage("Meal plan generated successfully.");
+    } catch (_error) {
+      setStepError("Unable to reach server while generating meal plan.");
     } finally {
       setIsSaving(false);
     }
@@ -692,6 +723,22 @@ export default function PreferencesPage() {
           ) : null}
 
           <div>
+            <label className="mb-2 block text-sm font-medium text-gray-700" htmlFor="numberOfMeals">
+              Meals per day
+            </label>
+            <select
+              id="numberOfMeals"
+              value={formData.numberOfMeals}
+              onChange={(event) => updateField("numberOfMeals", event.target.value as "3" | "4" | "5")}
+              className="w-full rounded-xl border border-white/70 bg-white/55 px-4 py-3 text-gray-900 outline-none backdrop-blur-md transition focus:border-gray-400 focus:bg-white/72"
+            >
+              <option value="3">3 meals (Classic)</option>
+              <option value="4">4 meals (3 + 1 snack)</option>
+              <option value="5">5 meals (Smaller portions)</option>
+            </select>
+          </div>
+
+          <div>
             <label className="mb-2 block text-sm font-medium text-gray-700" htmlFor="dietaryRestrictions">
               Dietary restrictions
             </label>
@@ -751,6 +798,9 @@ export default function PreferencesPage() {
           </p>
           <p>
             <span className="font-semibold">Calculated Intake:</span> {calorieData ? `${calorieData.equations[selectedEquation].intake} kcal/day` : "-"}
+          </p>
+          <p>
+            <span className="font-semibold">Meals per day:</span> {formData.numberOfMeals}
           </p>
           <p>
             <span className="font-semibold">Dietary Restrictions:</span> {formData.dietaryRestrictions || "-"}
@@ -876,7 +926,7 @@ export default function PreferencesPage() {
                     disabled={isSaving}
                     className="rounded-xl border border-gray-900 bg-gray-900 px-6 py-3 font-semibold text-white transition hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-70"
                   >
-                    {isSaving ? "Saving..." : "Finish Setup"}
+                    {isSaving ? "Generating..." : "Generate Meal Plan"}
                   </button>
                 )}
               </div>
@@ -886,6 +936,12 @@ export default function PreferencesPage() {
 
             {stepError ? <p className="mt-3 text-sm font-medium text-red-600">{stepError}</p> : null}
             {saveMessage ? <p className="mt-4 text-sm font-medium text-gray-700">{saveMessage}</p> : null}
+            {formattedMealPlan ? (
+              <article className="mt-4 rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
+                <h2 className="mb-3 text-xl font-bold text-gray-900">Your Meal Plan</h2>
+                <pre className="max-h-72 overflow-auto whitespace-pre-wrap text-sm leading-7 text-gray-700">{formattedMealPlan}</pre>
+              </article>
+            ) : null}
 
             <div className="mt-6">
               <div className="h-4 w-full overflow-hidden rounded-full border border-white/70 bg-white/45 backdrop-blur-md">

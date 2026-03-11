@@ -30,6 +30,8 @@ services:
       - DATABASE_URL=postgresql://wesupply:wesupply@db:5432/wesupply
       - JWT_SECRET=wesupply-dev-secret
       - FRONTEND_ORIGIN=http://localhost:3000
+      - GEMINI_MODEL=gemini-2.5-flash
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
     volumes:
       - ./backend:/app
     depends_on:
